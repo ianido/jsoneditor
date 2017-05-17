@@ -416,6 +416,7 @@ function autocomplete(el) {
       var _iteratorError = undefined;
 
       try {
+
         for (var _iterator = text[Symbol.iterator](), _step; !(_iteratorNormalCompletion = (_step = _iterator.next()).done); _iteratorNormalCompletion = true) {
           var char = _step.value;
 
