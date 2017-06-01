@@ -3,8 +3,8 @@
 <head>
   <title>JSONEditor | Auto Complete</title>
     
-    <link href="dist/jsoneditor.css" rel="stylesheet" type="text/css">
-    <script src="dist/jsoneditor.js"></script>
+  <link href="dist/jsoneditor.css" rel="stylesheet" type="text/css">
+  <script src="dist/jsoneditor.js"></script>
 
 
   <style type="text/css">
@@ -36,8 +36,8 @@
   var options = {
       modes: ['text', 'tree'],
       autocomplete: {          
-          ApplyTo:['name','value'], // This indicates the autocomplete is going to be applied to json properties names and values.
-          GetOptions: function () {
+          applyTo:['name','value'], // This indicates the autocomplete is going to be applied to json properties names and values.
+          getOptions: function () {
               return ["apple","cranberry","raspberry","pie"];              
           }
       }

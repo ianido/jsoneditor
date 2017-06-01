@@ -25,7 +25,7 @@
  *
  * @author  Jos de Jong, <wjosdejong@gmail.com>
  * @version 5.6.0
- * @date    2017-05-26
+ * @date    2017-05-31
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -164,8 +164,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // validate options
 	    if (options) {
 	      var VALID_OPTIONS = [
+	        'ajv', 'schema','templates',
 	        'ace', 'theme','autocomplete',
-	        'ajv', 'schema',
 	        'onChange', 'onEditable', 'onError', 'onModeChange',
 	        'escapeUnicode', 'history', 'search', 'mode', 'modes', 'name', 'indentation', 'sortObjectKeys'
 	      ];
@@ -373,11 +373,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 
 	    if (ajv) {
-	      this.validateSchema = ajv.compile(schema);
+	        this.validateSchema = ajv.compile(schema);
 
-	      // add schema to the options, so that when switching to an other mode,
-	      // the set schema is not lost
-	      this.options.schema = schema;
+	        // add schema to the options, so that when switching to an other mode,
+	        // the set schema is not lost
+	        this.options.schema = schema;
 
 	      // validate now
 	      this.validate();
@@ -8558,7 +8558,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  this._setOptions(options);
 
 	  if (options.autocomplete)
-	      this.autocomplete = new autocomplete(options.autocomplete.Config);
+	      this.autocomplete = new autocomplete(options.autocomplete.config);
 
 	  if (this.options.history && this.options.mode !== 'view') {
 	    this.history = new History(this);
@@ -9612,13 +9612,13 @@ return /******/ (function(modules) { // webpackBootstrap
 	  if ((this.options.autocomplete) && (!handled)) {
 	      if (!ctrlKey && !altKey && !metaKey && (event.key.length == 1 || keynum == 8 || keynum == 46)) {
 	          handled = false;
-	          if ((this.options.autocomplete.ApplyTo.indexOf('value') >= 0 && event.target.className.indexOf("jsoneditor-value") >= 0) || 
-	              (this.options.autocomplete.ApplyTo.indexOf('name') >= 0 && event.target.className.indexOf("jsoneditor-field") >= 0)) {
+	          if ((this.options.autocomplete.applyTo.indexOf('value') >= 0 && event.target.className.indexOf("jsoneditor-value") >= 0) || 
+	              (this.options.autocomplete.applyTo.indexOf('name') >= 0 && event.target.className.indexOf("jsoneditor-field") >= 0)) {
 	              var node = Node.getNodeFromTarget(event.target);
-	              if (this.options.autocomplete.ActivationChar == null || event.target.innerText.startsWith(this.options.autocomplete.ActivationChar)) { // Activate autocomplete
+	              if (this.options.autocomplete.activationChar == null || event.target.innerText.startsWith(this.options.autocomplete.activationChar)) { // Activate autocomplete
 	                  setTimeout(function (hnode, element) {
 	                      if (element.innerText.length > 0) {
-	                          var options = this.options.autocomplete.GetOptions(this.autocomplete, hnode, element.innerText);
+	                          var options = this.options.autocomplete.getOptions(this.autocomplete, hnode, element.innerText);
 	                          if (options.length > 0)
 	                              this.autocomplete.Show(element, options);
 	                      }
@@ -11953,7 +11953,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var height = ul.clientHeight; // force a reflow in Firefox
 	    setTimeout(function () {
 	      if (me.expandedItem == domItem) {
-	        ul.style.height = (ul.childNodes.length * 24) + 'px';
+	        var childsHeight = 0;
+	        for (var i = 0; i < ul.childNodes.length; i++) {
+	          childsHeight += ul.childNodes[i].clientHeight;
+	        }
+	        ul.style.height = childsHeight + 'px';
 	        ul.style.padding = '5px 10px';
 	      }
 	    }, 0);
@@ -15273,6 +15277,32 @@ return /******/ (function(modules) { // webpackBootstrap
 	      'but always returned as string.'
 	};
 
+	Node.prototype.addTemplates = function (menu, append) {
+	    var node = this;
+	    var templates = node.editor.options.templates;
+	    if (templates == null) return;
+	    if (templates.length) {
+	        // create a separator
+	        menu.push({
+	            'type': 'separator'
+	        });
+	    }
+	    var appendData = function (name, data) {
+	        node._onAppend(name, data);
+	    };
+	    var insertData = function (name, data) {
+	        node._onInsertBefore(name, data);
+	    };
+	    templates.forEach(function (template) {
+	        menu.push({
+	            text: template.text,
+	            className: (template.className || 'jsoneditor-type-object'),
+	            title: template.title,
+	            click: (append ? appendData.bind(this, template.field, template.value) : insertData.bind(this, template.field, template.value))
+	        });
+	    });
+	};
+
 	/**
 	 * Show a contextmenu for this node
 	 * @param {HTMLElement} anchor   Anchor element to attach the context menu to
@@ -15372,52 +15402,91 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // create append button (for last child node only)
 	    var childs = node.parent.childs;
 	    if (node == childs[childs.length - 1]) {
-	      items.push({
-	        text: 'Append',
-	        title: 'Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
-	        submenuTitle: 'Select the type of the field to be appended',
-	        className: 'jsoneditor-append',
-	        click: function () {
-	          node._onAppend('', '', 'auto');
-	        },
-	        submenu: [
-	          {
+	        var appendSubmenu = [
+	            {
+	                text: 'Auto',
+	                className: 'jsoneditor-type-auto',
+	                title: titles.auto,
+	                click: function () {
+	                    node._onAppend('', '', 'auto');
+	                }
+	            },
+	            {
+	                text: 'Array',
+	                className: 'jsoneditor-type-array',
+	                title: titles.array,
+	                click: function () {
+	                    node._onAppend('', []);
+	                }
+	            },
+	            {
+	                text: 'Object',
+	                className: 'jsoneditor-type-object',
+	                title: titles.object,
+	                click: function () {
+	                    node._onAppend('', {});
+	                }
+	            },
+	            {
+	                text: 'String',
+	                className: 'jsoneditor-type-string',
+	                title: titles.string,
+	                click: function () {
+	                    node._onAppend('', '', 'string');
+	                }
+	            }
+	        ];
+	        node.addTemplates(appendSubmenu, true);
+	        items.push({
+	            text: 'Append',
+	            title: 'Append a new field with type \'auto\' after this field (Ctrl+Shift+Ins)',
+	            submenuTitle: 'Select the type of the field to be appended',
+	            className: 'jsoneditor-append',
+	            click: function () {
+	                node._onAppend('', '', 'auto');
+	            },
+	            submenu: appendSubmenu
+	        });
+	    }
+
+	    
+
+	    // create insert button
+	    var insertSubmenu = [
+	        {
 	            text: 'Auto',
 	            className: 'jsoneditor-type-auto',
 	            title: titles.auto,
 	            click: function () {
-	              node._onAppend('', '', 'auto');
+	                node._onInsertBefore('', '', 'auto');
 	            }
-	          },
-	          {
+	        },
+	        {
 	            text: 'Array',
 	            className: 'jsoneditor-type-array',
 	            title: titles.array,
 	            click: function () {
-	              node._onAppend('', []);
+	                node._onInsertBefore('', []);
 	            }
-	          },
-	          {
+	        },
+	        {
 	            text: 'Object',
 	            className: 'jsoneditor-type-object',
 	            title: titles.object,
 	            click: function () {
-	              node._onAppend('', {});
+	                node._onInsertBefore('', {});
 	            }
-	          },
-	          {
+	        },
+	        {
 	            text: 'String',
 	            className: 'jsoneditor-type-string',
 	            title: titles.string,
 	            click: function () {
-	              node._onAppend('', '', 'string');
+	                node._onInsertBefore('', '', 'string');
 	            }
-	          }
-	        ]
-	      });
-	    }
-
-	    // create insert button
+	        }
+	    ];
+	    node.addTemplates(insertSubmenu, false);
 	    items.push({
 	      text: 'Insert',
 	      title: 'Insert a new field with type \'auto\' before this field (Ctrl+Ins)',
@@ -15426,40 +15495,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	      click: function () {
 	        node._onInsertBefore('', '', 'auto');
 	      },
-	      submenu: [
-	        {
-	          text: 'Auto',
-	          className: 'jsoneditor-type-auto',
-	          title: titles.auto,
-	          click: function () {
-	            node._onInsertBefore('', '', 'auto');
-	          }
-	        },
-	        {
-	          text: 'Array',
-	          className: 'jsoneditor-type-array',
-	          title: titles.array,
-	          click: function () {
-	            node._onInsertBefore('', []);
-	          }
-	        },
-	        {
-	          text: 'Object',
-	          className: 'jsoneditor-type-object',
-	          title: titles.object,
-	          click: function () {
-	            node._onInsertBefore('', {});
-	          }
-	        },
-	        {
-	          text: 'String',
-	          className: 'jsoneditor-type-string',
-	          title: titles.string,
-	          click: function () {
-	            node._onInsertBefore('', '', 'string');
-	          }
-	        }
-	      ]
+	      submenu: insertSubmenu
 	    });
 
 	    if (this.editable.field) {
@@ -15823,50 +15859,52 @@ return /******/ (function(modules) { // webpackBootstrap
 	  AppendNode.prototype.showContextMenu = function (anchor, onClose) {
 	    var node = this;
 	    var titles = Node.TYPE_TITLES;
+	    var appendSubmenu = [
+	        {
+	            text: 'Auto',
+	            className: 'jsoneditor-type-auto',
+	            title: titles.auto,
+	            click: function () {
+	                node._onAppend('', '', 'auto');
+	            }
+	        },
+	        {
+	            text: 'Array',
+	            className: 'jsoneditor-type-array',
+	            title: titles.array,
+	            click: function () {
+	                node._onAppend('', []);
+	            }
+	        },
+	        {
+	            text: 'Object',
+	            className: 'jsoneditor-type-object',
+	            title: titles.object,
+	            click: function () {
+	                node._onAppend('', {});
+	            }
+	        },
+	        {
+	            text: 'String',
+	            className: 'jsoneditor-type-string',
+	            title: titles.string,
+	            click: function () {
+	                node._onAppend('', '', 'string');
+	            }
+	        }
+	    ];
+	    node.addTemplates(appendSubmenu, true);
 	    var items = [
 	      // create append button
 	      {
-	        'text': 'Append',
+	        'text': 'Append!',
 	        'title': 'Append a new field with type \'auto\' (Ctrl+Shift+Ins)',
 	        'submenuTitle': 'Select the type of the field to be appended',
 	        'className': 'jsoneditor-insert',
 	        'click': function () {
 	          node._onAppend('', '', 'auto');
 	        },
-	        'submenu': [
-	          {
-	            'text': 'Auto',
-	            'className': 'jsoneditor-type-auto',
-	            'title': titles.auto,
-	            'click': function () {
-	              node._onAppend('', '', 'auto');
-	            }
-	          },
-	          {
-	            'text': 'Array',
-	            'className': 'jsoneditor-type-array',
-	            'title': titles.array,
-	            'click': function () {
-	              node._onAppend('', []);
-	            }
-	          },
-	          {
-	            'text': 'Object',
-	            'className': 'jsoneditor-type-object',
-	            'title': titles.object,
-	            'click': function () {
-	              node._onAppend('', {});
-	            }
-	          },
-	          {
-	            'text': 'String',
-	            'className': 'jsoneditor-type-string',
-	            'title': titles.string,
-	            'click': function () {
-	              node._onAppend('', '', 'string');
-	            }
-	          }
-	        ]
+	        'submenu': appendSubmenu
 	      }
 	    ];
 
@@ -16071,16 +16109,10 @@ return /******/ (function(modules) { // webpackBootstrap
 
 	function completely(config) {
 	    config = config || {};
-	    config.ConfirmKeys = config.ConfirmKeys || [39, 35, 9] // right, end, tab 
-	    config.fontSize = config.fontSize || '';
-	    config.fontFamily = config.fontFamily || '';
-	    config.promptInnerHTML = config.promptInnerHTML || '';
-	    config.color = config.color || '#333';
-	    config.hintColor = config.hintColor || '#aaa';
-	    config.backgroundColor = config.backgroundColor || '#fff';
-	    config.dropDownBorderColor = config.dropDownBorderColor || '#aaa';
-	    config.dropDownZIndex = config.dropDownZIndex || '100'; // to ensure we are in front of everybody
-	    config.dropDownOnHoverBackgroundColor = config.dropDownOnHoverBackgroundColor || '#ddd';
+	    config.confirmKeys = config.confirmKeys || [39, 35, 9] // right, end, tab 
+
+	    var fontSize = '';
+	    var fontFamily = '';    
 
 	    var wrapper = document.createElement('div');
 	    wrapper.style.position = 'relative';
@@ -16090,25 +16122,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	    wrapper.style.padding = '0';
 
 	    var dropDown = document.createElement('div');
+	    dropDown.className = 'autocomplete dropdown';
 	    dropDown.style.position = 'absolute';
 	    dropDown.style.visibility = 'hidden';
-	    dropDown.style.outline = '0';
-	    dropDown.style.margin = '0';
-	    dropDown.style.paddingLeft = '2pt';
-	    dropDown.style.paddingRight = '10pt';
-	    dropDown.style.textAlign = 'left';
-	    dropDown.style.fontSize = config.fontSize;
-	    dropDown.style.fontFamily = config.fontFamily;
-	    dropDown.style.backgroundColor = config.backgroundColor;
-	    dropDown.style.zIndex = config.dropDownZIndex;
-	    dropDown.style.cursor = 'default';
-	    dropDown.style.borderStyle = 'solid';
-	    dropDown.style.borderWidth = '1px';
-	    dropDown.style.borderColor = config.dropDownBorderColor;
-	    dropDown.style.overflowX = 'hidden';
-	    dropDown.style.whiteSpace = 'pre';
-	    dropDown.style.overflowY = 'scroll';  // note: this might be ugly when the scrollbar is not required. however in this way the width of the dropDown takes into account
-
 
 	    var spacer;
 	    var leftSide; // <-- it will contain the leftSide part of the textfield (the bit that was already autocompleted)
@@ -16140,7 +16156,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	                for (var i = 0; i < array.length; i++) {
 	                    if (array[i].indexOf(token) !== 0) { continue; }
 	                    var divRow = document.createElement('div');
-	                    divRow.style.color = config.color;
+	                    divRow.className = 'item';
+	                    //divRow.style.color = config.color;
 	                    divRow.onmouseover = onMouseOver;
 	                    divRow.onmouseout = onMouseOut;
 	                    divRow.onmousedown = onMouseDown;
@@ -16172,9 +16189,9 @@ return /******/ (function(modules) { // webpackBootstrap
 	            },
 	            highlight: function (index) {
 	                if (oldIndex != -1 && rows[oldIndex]) {
-	                    rows[oldIndex].style.backgroundColor = config.backgroundColor;
+	                    rows[oldIndex].className = "item";
 	                }
-	                rows[index].style.backgroundColor = config.dropDownOnHoverBackgroundColor; // <-- should be config
+	                rows[index].className = "item hover"; 
 	                oldIndex = index;
 	            },
 	            move: function (step) { // moves the selection either up or down (unless it's not possible) step is either +1 or -1.
@@ -16220,8 +16237,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	            spacer.style.border = '0';
 	            spacer.style.left = '0';
 	            spacer.style.whiteSpace = 'pre';
-	            spacer.style.fontSize = config.fontSize;
-	            spacer.style.fontFamily = config.fontFamily;
+	            spacer.style.fontSize = fontSize;
+	            spacer.style.fontFamily = fontFamily;
 	            spacer.style.fontWeight = 'normal';
 	            document.body.appendChild(spacer);
 	        }
@@ -16253,16 +16270,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	                this.elementHint.remove();
 	                this.elementHint = null;
 	            }
-
-	            if (config.fontSize == '') {
-	                config.fontSize = window.getComputedStyle(element).getPropertyValue('font-size');
-	                dropDown.style.fontSize = config.fontSize;
+	            
+	            if (fontSize == '') {
+	                fontSize = window.getComputedStyle(element).getPropertyValue('font-size');
 	            }
-	            if (config.fontFamily == '') {
-	                config.fontFamily = window.getComputedStyle(element).getPropertyValue('font-family');
-	                dropDown.style.fontFamily = config.fontFamily;
+	            if (fontFamily == '') {
+	                fontFamily = window.getComputedStyle(element).getPropertyValue('font-family');
 	            }
-
+	            
 	            var w = element.getBoundingClientRect().right - element.getBoundingClientRect().left;
 	            dropDown.style.marginLeft = '0';
 	            dropDown.style.marginTop = element.getBoundingClientRect().height + 'px';
@@ -16282,15 +16297,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	            this.element.style.position = 'relative';
 	            this.element.style.backgroundColor = 'transparent';
 	            this.element.style.borderColor = 'transparent';
-	            
 
 	            this.elementHint = element.cloneNode();
+	            this.elementHint.className = 'autocomplete hint';
 	            this.elementHint.style.zIndex = 2;
 	            this.elementHint.style.position = 'absolute';
-	            this.elementHint.style.top = '0';
-	            this.elementHint.style.left = '0';
-	            this.elementHint.style.color = config.hintColor;
 	            this.elementHint.onfocus = function () { this.element.focus(); }.bind(this);
+
+
 
 	            if (this.element.addEventListener) {
 	                this.element.removeEventListener("keydown", keyDownHandler);
@@ -16374,8 +16388,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	            e.stopPropagation();
 	            return;
 	        }
-	        config.ConfirmKeys
-	        if (config.ConfirmKeys.indexOf(keyCode) >= 0) { //  (autocomplete triggered)
+
+	        if (config.confirmKeys.indexOf(keyCode) >= 0) { //  (autocomplete triggered)
 	            if (keyCode == 9) {                 
 	                if (this.elementHint.innerText.length == 0) {
 	                    rs.onTab(); 
