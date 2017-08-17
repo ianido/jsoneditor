@@ -3,6 +3,42 @@
 https://github.com/josdejong/jsoneditor
 
 
+## 2017-07-24, version 5.9.3
+
+- Fixed broken multi-selection (regression).
+
+
+## 2017-07-13, version 5.9.2
+
+- Fixed a bug in the JSON sanitizer.
+
+
+## 2017-07-13, version 5.9.1
+
+- `setText` method of tree mode now automatically sanitizes JSON input
+  when needed.
+- Fixed #430: automatically fix unescaped control characters in
+  JSON input.
+
+
+## 2017-07-10, version 5.9.0
+
+- Implemented support for JSON schema references `$ref`, see #302.
+  Thanks @meirotstein.
+- Fixed #429: JSONEditor no longer accepting an empty array for option
+  `modes`. Thanks @trystan2k.
+- Fixed JSONEditor picking the first entry of `modes` as initial mode
+  instead of option `mode`.
+
+
+## 2017-07-08, version 5.8.2
+
+- Select first option from `modes` instead of `tree` when `mode` is not
+  configured. Thanks @bag-man.
+- Some fixes and improvements in the API of autocompletion.
+  Thanks @israelito3000.
+
+
 ## 2017-07-03, version 5.8.1
 
 - Fixed broken minified bundles in folder `dist` (again...).

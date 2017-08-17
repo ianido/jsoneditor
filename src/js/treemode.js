@@ -112,6 +112,7 @@ treemode._setOptions = function (options) {
     mode: 'tree',
     name: undefined,   // field name of root node
     schema: null,
+    schemaRefs: null,
     autocomplete: null
   };
 
@@ -125,7 +126,7 @@ treemode._setOptions = function (options) {
   }
 
   // compile a JSON schema validator if a JSON schema is provided
-  this.setSchema(this.options.schema);
+  this.setSchema(this.options.schema, this.options.schemaRefs);
 
   // create a debounced validate function
   this._debouncedValidate = util.debounce(this.validate.bind(this), this.DEBOUNCE_INTERVAL);
@@ -215,7 +216,16 @@ treemode.getText = function() {
  * @param {String} jsonText
  */
 treemode.setText = function(jsonText) {
-  this.set(util.parse(jsonText));
+  try {
+    this.set(util.parse(jsonText)); // this can throw an error
+  }
+  catch (err) {
+    // try to sanitize json, replace JavaScript notation with JSON notation
+    var sanitizedJsonText = util.sanitize(jsonText);
+
+    // try to parse again
+    this.set(util.parse(sanitizedJsonText)); // this can throw an error
+  }
 };
 
 /**
@@ -689,7 +699,7 @@ treemode._createFrame = function () {
   };
   this.menu.appendChild(expandAll);
 
-  // create expand all button
+  // create collapse all button
   var collapseAll = document.createElement('button');
   collapseAll.type = 'button';
   collapseAll.title = 'Collapse all fields';
@@ -1115,7 +1125,7 @@ treemode._onKeyDown = function (event) {
           // Activate autocomplete
           setTimeout(function (hnode, element) {
               if (element.innerText.length > 0) {
-                  var result = this.options.autocomplete.getOptions(element.innerText, editor.get(), jsonElementType);
+                  var result = this.options.autocomplete.getOptions(element.innerText, hnode.getPath(), jsonElementType, hnode.editor);
                   if (typeof result.then === 'function') {
                       // probably a promise
                       if (result.then(function (obj) {
@@ -1187,7 +1197,7 @@ treemode._createTable = function () {
 /**
  * Show a contextmenu for this node.
  * Used for multiselection
- * @param {HTMLElement} anchor   Anchor element to attache the context menu to.
+ * @param {HTMLElement} anchor   Anchor element to attach the context menu to.
  * @param {function} [onClose]   Callback method called when the context menu
  *                               is being closed.
  */

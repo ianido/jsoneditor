@@ -24,8 +24,8 @@
  * Copyright (c) 2011-2017 Jos de Jong, http://jsoneditoronline.org
  *
  * @author  Jos de Jong, <wjosdejong@gmail.com>
- * @version 5.8.1
- * @date    2017-07-03
+ * @version 5.9.3
+ * @date    2017-07-24
  */
 (function webpackUniversalModuleDefinition(root, factory) {
 	if(typeof exports === 'object' && typeof module === 'object')
@@ -164,7 +164,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // validate options
 	    if (options) {
 	      var VALID_OPTIONS = [
-	        'ajv', 'schema','templates',
+	        'ajv', 'schema', 'schemaRefs','templates',
 	        'ace', 'theme','autocomplete',
 	        'onChange', 'onEditable', 'onError', 'onModeChange',
 	        'escapeUnicode', 'history', 'search', 'mode', 'modes', 'name', 'indentation', 'sortObjectKeys'
@@ -215,7 +215,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  this.options = options || {};
 	  this.json = json || {};
 
-	  var mode = this.options.mode || 'tree';
+	  var mode = this.options.mode || (this.options.modes && this.options.modes[0]) || 'tree';
 	  this.setMode(mode);
 	};
 
@@ -358,8 +358,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * Set a JSON schema for validation of the JSON object.
 	 * To remove the schema, call JSONEditor.setSchema(null)
 	 * @param {Object | null} schema
+	 * @param {Object.<string, Object>=} schemaRefs Schemas that are referenced using the `$ref` property from the JSON schema that are set in the `schema` option,
+	 +  the object structure in the form of `{reference_key: schemaObject}`
 	 */
-	JSONEditor.prototype.setSchema = function (schema) {
+	JSONEditor.prototype.setSchema = function (schema, schemaRefs) {
 	  // compile a JSON schema validator if a JSON schema is provided
 	  if (schema) {
 	    var ajv;
@@ -373,11 +375,20 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 
 	    if (ajv) {
-	        this.validateSchema = ajv.compile(schema);
+	      if(schemaRefs) {
+	        for (var ref in schemaRefs) {
+	          ajv.removeSchema(ref);  // When updating a schema - old refs has to be removed first
+	          if(schemaRefs[ref]) {
+	            ajv.addSchema(schemaRefs[ref], ref);
+	          }
+	        }
+	        this.options.schemaRefs = schemaRefs;
+	      }
+	      this.validateSchema = ajv.compile(schema);
 
-	        // add schema to the options, so that when switching to an other mode,
-	        // the set schema is not lost
-	        this.options.schema = schema;
+	      // add schema to the options, so that when switching to an other mode,
+	      // the set schema is not lost
+	      this.options.schema = schema;
 
 	      // validate now
 	      this.validate();
@@ -389,6 +400,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    // remove current schema
 	    this.validateSchema = null;
 	    this.options.schema = null;
+	    this.options.schemaRefs = null;
 	    this.validate(); // to clear current error messages
 	    this.refresh();  // update DOM
 	  }
@@ -588,6 +600,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    mode: 'tree',
 	    name: undefined,   // field name of root node
 	    schema: null,
+	    schemaRefs: null,
 	    autocomplete: null
 	  };
 
@@ -601,7 +614,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  }
 
 	  // compile a JSON schema validator if a JSON schema is provided
-	  this.setSchema(this.options.schema);
+	  this.setSchema(this.options.schema, this.options.schemaRefs);
 
 	  // create a debounced validate function
 	  this._debouncedValidate = util.debounce(this.validate.bind(this), this.DEBOUNCE_INTERVAL);
@@ -691,7 +704,16 @@ return /******/ (function(modules) { // webpackBootstrap
 	 * @param {String} jsonText
 	 */
 	treemode.setText = function(jsonText) {
-	  this.set(util.parse(jsonText));
+	  try {
+	    this.set(util.parse(jsonText)); // this can throw an error
+	  }
+	  catch (err) {
+	    // try to sanitize json, replace JavaScript notation with JSON notation
+	    var sanitizedJsonText = util.sanitize(jsonText);
+
+	    // try to parse again
+	    this.set(util.parse(sanitizedJsonText)); // this can throw an error
+	  }
 	};
 
 	/**
@@ -1165,7 +1187,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	  };
 	  this.menu.appendChild(expandAll);
 
-	  // create expand all button
+	  // create collapse all button
 	  var collapseAll = document.createElement('button');
 	  collapseAll.type = 'button';
 	  collapseAll.title = 'Collapse all fields';
@@ -1591,7 +1613,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	          // Activate autocomplete
 	          setTimeout(function (hnode, element) {
 	              if (element.innerText.length > 0) {
-	                  var result = this.options.autocomplete.getOptions(element.innerText, editor.get(), jsonElementType);
+	                  var result = this.options.autocomplete.getOptions(element.innerText, hnode.getPath(), jsonElementType, hnode.editor);
 	                  if (typeof result.then === 'function') {
 	                      // probably a promise
 	                      if (result.then(function (obj) {
@@ -1663,7 +1685,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	/**
 	 * Show a contextmenu for this node.
 	 * Used for multiselection
-	 * @param {HTMLElement} anchor   Anchor element to attache the context menu to.
+	 * @param {HTMLElement} anchor   Anchor element to attach the context menu to.
 	 * @param {function} [onClose]   Callback method called when the context menu
 	 *                               is being closed.
 	 */
@@ -2129,6 +2151,14 @@ return /******/ (function(modules) { // webpackBootstrap
 	    jsString = match[3];
 	  }
 
+	  var controlChars = {
+	    '\b': '\\b',
+	    '\f': '\\f',
+	    '\n': '\\n',
+	    '\r': '\\r',
+	    '\t': '\\t'
+	  };
+
 	  // helper functions to get the current/prev/next character
 	  function curr () { return jsString.charAt(i);     }
 	  function next()  { return jsString.charAt(i + 1); }
@@ -2174,20 +2204,25 @@ return /******/ (function(modules) { // webpackBootstrap
 	    while (i < jsString.length && c !== quote) {
 	      if (c === '"' && prev() !== '\\') {
 	        // unescaped double quote, escape it
-	        chars.push('\\');
+	        chars.push('\\"');
 	      }
-
-	      // handle escape character
-	      if (c === '\\') {
+	      else if (controlChars.hasOwnProperty(c)) {
+	        // replace unescaped control characters with escaped ones
+	        chars.push(controlChars[c])
+	      }
+	      else if (c === '\\') {
+	        // remove the escape character when followed by a single quote ', not needed
 	        i++;
 	        c = curr();
-
-	        // remove the escape character when followed by a single quote ', not needed
 	        if (c !== '\'') {
 	          chars.push('\\');
 	        }
+	        chars.push(c);
 	      }
-	      chars.push(c);
+	      else {
+	        // regular character
+	        chars.push(c);
+	      }
 
 	      i++;
 	      c = curr();
@@ -3734,7 +3769,11 @@ return /******/ (function(modules) { // webpackBootstrap
 	          var divIcon = document.createElement('div');
 	          divIcon.className = 'jsoneditor-icon';
 	          button.appendChild(divIcon);
-	          button.appendChild(document.createTextNode(item.text));
+	          var divText = document.createElement('div');
+	          divText.className = 'jsoneditor-text' +
+	              (item.click ? '' : ' jsoneditor-right-margin');
+	          divText.appendChild(document.createTextNode(item.text));
+	          button.appendChild(divText);
 
 	          var buttonSubmenu;
 	          if (item.click) {
@@ -3781,7 +3820,8 @@ return /******/ (function(modules) { // webpackBootstrap
 	        }
 	        else {
 	          // no submenu, just a button with clickhandler
-	          button.innerHTML = '<div class="jsoneditor-icon"></div>' + item.text;
+	          button.innerHTML = '<div class="jsoneditor-icon"></div>' +
+	              '<div class="jsoneditor-text">' + item.text + '</div>';
 	        }
 
 	        domItems.push(domItem);
@@ -4487,10 +4527,10 @@ return /******/ (function(modules) { // webpackBootstrap
 	};
 
 	/**
-	 * Get path of the root node till the current node
+	 * Get jsonpath of the current node
 	 * @return {Node[]} Returns an array with nodes
 	 */
-	Node.prototype.getNodePath = function() {
+	Node.prototype.getNodePath = function () {
 	  var path = this.parent ? this.parent.getNodePath() : [];
 	  path.push(this);
 	  return path;
@@ -7909,7 +7949,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    var items = [
 	      // create append button
 	      {
-	        'text': 'Append!',
+	        'text': 'Append',
 	        'title': 'Append a new field with type \'auto\' (Ctrl+Shift+Ins)',
 	        'submenuTitle': 'Select the type of the field to be appended',
 	        'className': 'jsoneditor-insert',
@@ -8687,7 +8727,7 @@ return /******/ (function(modules) { // webpackBootstrap
 	    }
 	  }
 
-	  this.setSchema(this.options.schema);
+	  this.setSchema(this.options.schema, this.options.schemaRefs);
 	};
 
 	/**
